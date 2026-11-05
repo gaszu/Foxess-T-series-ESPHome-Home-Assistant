@@ -1,0 +1,83 @@
+# Home Assistant package. Verify the source entity IDs after pairing ESPHome.
+# These are inverter measurements; no CHINT or grid meter is required.
+utility_meter:
+  foxess_production_hourly:
+    source: sensor.t_series_generation_total
+    cycle: hourly
+    periodically_resetting: false
+  foxess_production_daily:
+    source: sensor.t_series_generation_total
+    cycle: daily
+    periodically_resetting: false
+  foxess_production_weekly:
+    source: sensor.t_series_generation_total
+    cycle: weekly
+    periodically_resetting: false
+  foxess_production_monthly:
+    source: sensor.t_series_generation_total
+    cycle: monthly
+    periodically_resetting: false
+  foxess_production_yearly:
+    source: sensor.t_series_generation_total
+    cycle: yearly
+    periodically_resetting: false
+
+input_number:
+  foxess_installed_pv_kwp:
+    name: FoxESS moc paneli
+    min: 0
+    max: 100
+    step: 0.01
+    unit_of_measurement: kWp
+    mode: box
+    icon: mdi:solar-panel
+
+template:
+  - binary_sensor:
+      - name: FoxESS Producing
+        unique_id: foxess_producing
+        availability: >-
+          {{ is_number(states('sensor.t_series_generation_power')) and
+             is_state('binary_sensor.t_series_communication', 'on') }}
+        state: "{{ states('sensor.t_series_generation_power') | float(0) > 20 }}"
+    sensor:
+      - name: FoxESS Specific Yield Today
+        unique_id: foxess_specific_yield_today
+        unit_of_measurement: kWh/kWp
+        state_class: measurement
+        availability: >-
+          {{ is_number(states('sensor.t_series_today_yield')) and
+             states('input_number.foxess_installed_pv_kwp') | float(0) > 0 }}
+        state: >-
+          {% set kwp = states('input_number.foxess_installed_pv_kwp') | float(0) %}
+          {{ (states('sensor.t_series_today_yield') | float(0) / kwp) | round(3)
+             if kwp > 0 else none }}
+  - triggers:
+      - trigger: state
+        entity_id: sensor.t_series_generation_power
+      - trigger: time
+        at: '00:00:00'
+      - trigger: homeassistant
+        event: start
+    sensor:
+      - name: FoxESS Peak Power Today
+        unique_id: foxess_peak_power_today
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        state: >-
+          {% set power = states('sensor.t_series_generation_power') | float(0) %}
+          {% set previous = this.state | float(0)
+             if this.attributes.get('day') == now().date().isoformat() else 0 %}
+          {{ [previous, power, 0] | max }}
+        attributes:
+          day: "{{ now().date().isoformat() }}"
+
+sensor:
+  - platform: history_stats
+    name: FoxESS Production Time Today
+    entity_id: binary_sensor.foxess_producing
+    state: 'on'
+    type: time
+    start: '{{ today_at() }}'
+    end: '{{ now() }}'

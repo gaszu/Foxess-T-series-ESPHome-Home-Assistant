@@ -1,0 +1,5 @@
+.esphome/
+.pio/
+__pycache__/
+*.pyc
+secrets.yaml
